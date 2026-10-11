@@ -32,6 +32,19 @@ namespace MAX30102
         bool signalValid;
     };
 
+        struct RawSample
+        {
+            uint32_t red;
+            uint32_t ir;
+            uint32_t sequence;
+        };
+
+    bool readSample(RawSample &sample);
+    uint32_t getQueueOverflowCount();
+
+    uint32_t getTotalSamplesAcquired();
+    uint32_t getQueueDepth();
+
     bool begin(TwoWire &wire = Wire);
     bool isInitialized();
 

@@ -6,60 +6,63 @@
 
 namespace Processing
 {
-    // Number of samples in one analysis window.
     constexpr uint16_t WINDOW_SIZE = 500;
 
     struct Features
     {
-        // DC components: mean optical intensity
-        float redDC;
-        float irDC;
+        float redDC = 0.0f;
+        float irDC = 0.0f;
 
-        // AC components: RMS variation around the mean
-        float redAC_RMS;
-        float irAC_RMS;
+        float redAC_RMS = 0.0f;
+        float irAC_RMS = 0.0f;
 
-        // Normalized pulsatile amplitudes (%)
-        float redNormalizedAC;
-        float irNormalizedAC;
+        float redNormalizedAC = 0.0f;
+        float irNormalizedAC = 0.0f;
 
-        // Optical ratio; not an Hb concentration equation
-        float opticalRatio;
+        float opticalRatio = 0.0f;
 
-        // Peak-to-peak variation
-        uint32_t redPeakToPeak;
-        uint32_t irPeakToPeak;
+        uint32_t redPeakToPeak = 0;
+        uint32_t irPeakToPeak = 0;
 
-        // Input signal-quality score (0-100)
-        uint8_t signalQuality;
+        uint8_t signalQuality = 0;
+        uint8_t contactPercent = 0;
+        uint8_t clippedPercent = 0;
 
-        bool fingerDetected;
-        bool windowReady;
-        bool signalValid;
+        bool fingerDetected = false;
+        bool windowReady = false;
+        bool signalValid = false;
     };
 
-    // Clear all samples and calculated features.
+    
+struct FilteredSample
+{
+    uint32_t rawRed = 0;
+    uint32_t rawIR = 0;
+
+    float redDC = 0.0f;
+    float irDC = 0.0f;
+
+    float redAC = 0.0f;
+    float irAC = 0.0f;
+
+    bool ready = false;
+};
+
+bool getLatestFilteredSample(FilteredSample &sample);
+
+
     void begin();
 
-    // Add one sample from the MAX30102 driver.
-    void addSample(
-        uint32_t red,
-        uint32_t ir,
-        bool fingerDetected,
-        uint8_t sensorQuality
-    );
+    // Ingest one raw red/IR sample.
+    void addSample(uint32_t red, uint32_t ir);
 
-    // Returns true after a complete window is collected.
     bool isWindowReady();
+    uint16_t getSampleCount();
 
-    // Calculate features from the current window.
+    // Calculates features and window-level validation.
     bool calculateFeatures(Features &features);
 
-    // Clear the window and start collecting again.
     void reset();
-
-    // Number of samples currently collected.
-    uint16_t getSampleCount();
 }
 
-#endif // PROCESSING_H
+#endif

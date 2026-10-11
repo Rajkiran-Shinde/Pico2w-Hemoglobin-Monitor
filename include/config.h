@@ -45,11 +45,45 @@ constexpr uint8_t INA219_I2C_ADDRESS   = 0x40;
 constexpr uint8_t PIN_MAX30102_INT = 17; // GP17, physical pin 22
 
 constexpr uint8_t MAX30102_LED_BRIGHTNESS = 60;
-constexpr uint8_t MAX30102_SAMPLE_AVERAGE = 4;
+constexpr uint8_t MAX30102_SAMPLE_AVERAGE = 1;
 constexpr uint8_t MAX30102_LED_MODE       = 2;   // Red + IR
-constexpr uint16_t MAX30102_SAMPLE_RATE   = 100;
+constexpr uint16_t MAX30102_SAMPLE_RATE   = 200;
 constexpr uint16_t MAX30102_PULSE_WIDTH   = 411;
 constexpr uint16_t MAX30102_ADC_RANGE     = 4096;
+
+
+ // ============================================================
+ // 3A. WINDOW-LEVEL SIGNAL VALIDATION
+ // Initial engineering thresholds; tune using recorded data.
+// ============================================================
+
+// Finger-detection hysteresis.
+// Use a lower threshold to release contact than to detect it.
+constexpr uint32_t PROCESSING_FINGER_ON_THRESHOLD  = 50000;
+constexpr uint32_t PROCESSING_FINGER_OFF_THRESHOLD = 40000;
+
+// MAX30102 nominal 18-bit ADC output.
+constexpr uint32_t PROCESSING_ADC_MAX = 262143;
+
+// Reject readings close to ADC saturation.
+constexpr uint32_t PROCESSING_ADC_CLIP_THRESHOLD = 260000;
+
+// Reject near-zero optical levels.
+constexpr uint32_t PROCESSING_MIN_DC_LEVEL = 1000;
+
+// Minimum and maximum normalized pulsatile RMS (% of DC).
+constexpr float PROCESSING_MIN_PI_PERCENT = 0.02f;
+constexpr float PROCESSING_MAX_PI_PERCENT = 5.0f;
+
+// Minimum proportion of samples with detected finger contact.
+constexpr uint8_t PROCESSING_MIN_CONTACT_PERCENT = 90;
+
+// Minimum overall quality score required for a valid window.
+constexpr uint8_t PROCESSING_MIN_QUALITY_SCORE = 60;
+
+// Maximum permitted fraction of clipped samples in a window (%).
+constexpr uint8_t PROCESSING_MAX_CLIPPED_PERCENT = 1;
+
 
 
 // ============================================================
