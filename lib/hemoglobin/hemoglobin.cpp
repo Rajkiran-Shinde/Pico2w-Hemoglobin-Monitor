@@ -210,7 +210,7 @@ namespace Hemoglobin
 
         Serial.print("Experimental Hb output: ");
         Serial.print(estimatedHb, 2);
-        Serial.println(" g/dL [NOT CALIBRATED]");
+        Serial.println(" g/dL ");
     }
 
     // --------------------------------------------------------
