@@ -27,7 +27,9 @@ void onMeasurement(float hb, const char *timestamp, bool valid, const char *stat
   if (!valid) { setMessage(status ? status : "Signal invalid", 2200); return; }
   if (selectedMode == MeasureMode::SINGLE) {
     if (singleDone) return;
-    if (!Storage::append(hb, timestamp, "OK")) { setMessage("Storage error", 2500); return; }
+    const char *recordStatus = (status && strcmp(status, "EXPERIMENTAL") == 0)
+        ? "EXPERIMENTAL" : "OK";
+    if (!Storage::append(hb, timestamp, recordStatus)) { setMessage("Storage error", 2500); return; }
     singleDone = true;
     previous = Screen::MEASURE;
     setMessage("Reading saved", 1600);

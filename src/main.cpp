@@ -97,18 +97,26 @@ void loop() {
         } else {
           Hemoglobin::Result result;
           Hemoglobin::Status status = Hemoglobin::estimate(features, result);
-          if (status == Hemoglobin::Status::ESTIMATE_AVAILABLE && result.available) {
-            latestHb = result.valueGdL; latestHbAvailable = true; setStatus("Signal OK");
+          if ((status == Hemoglobin::Status::ESTIMATE_AVAILABLE ||
+               status == Hemoglobin::Status::EXPERIMENTAL_ESTIMATE) && result.available) {
+            latestHb = result.valueGdL;
+            latestHbAvailable = true;
+            const bool calibrated = (status == Hemoglobin::Status::ESTIMATE_AVAILABLE);
+            setStatus(calibrated ? "Signal OK" : "EXP - NOT CALIBRATED");
             if (rtcAvailable) RTC::getTimestamp(timestamp, sizeof(timestamp));
             else strncpy(timestamp, "RTC unavailable", sizeof(timestamp));
-            Mode::onMeasurement(latestHb, timestamp, true, "OK");
-            Serial.print("Hb: "); Serial.print(latestHb, 2); Serial.println(" g/dL");
+            Mode::onMeasurement(latestHb, timestamp, true,
+                                calibrated ? "OK" : "EXPERIMENTAL");
+            Serial.print(calibrated ? "Hb calibrated: " : "Hb experimental (NOT calibrated): ");
+            Serial.print(latestHb, 2);
+            Serial.println(" g/dL");
+            Serial.print("Optical ratio: ");
+            Serial.println(result.inputRatio, 4);
           } else {
             latestHbAvailable = false;
             setStatus(Hemoglobin::statusToString(status));
             if (status == Hemoglobin::Status::CALIBRATION_MISSING) {
-              // Do not display or save a fabricated Hb value.
-              Mode::setMessage("Calibration required", 2500);
+              setStatus("EXP - NOT CALIBRATED");
             } else if (status == Hemoglobin::Status::INPUT_OUT_OF_RANGE) {
               Mode::onMeasurement(0, timestamp, false, "Signal out of range");
             }

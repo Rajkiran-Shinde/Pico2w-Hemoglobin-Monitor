@@ -23,11 +23,7 @@ namespace Display {
 
 static bool ready = false;
 
-// Hb API currently supplies values in g/dL.
-// Convert to g/L for the OLED and measurement history.
-static float toGL(float hbGdL) {
-    return hbGdL * 10.0f;
-}
+// Hb values supplied by main.cpp and stored in history are already in g/dL.
 
 bool begin() {
     oled.setI2CAddress(OLED_I2C_ADDRESS << 1);
@@ -138,13 +134,13 @@ void update(
                 snprintf(
                     value,
                     sizeof(value),
-                    "Hb: %.1f g/L",
-                    toGL(hb)
+                    "Hb: %.2f g/dL",
+                    hb
                 );
 
                 oled.drawStr(0, 40, value);
                 oled.setFont(u8g2_font_5x7_tf);
-                oled.drawStr(0, 51, "Estimated Hb result");
+                oled.drawStr(0, 51, "Experimental - NOT calibrated");
 
             } else {
                 oled.drawStr(0, 35, "Keep finger still");
@@ -185,22 +181,21 @@ void update(
                 snprintf(
                     value,
                     sizeof(value),
-                    "Hb: %.1f g/L",
-                    toGL(rec.hb)
+                    "Hb: %.2f g/dL",
+                    rec.hb
                 );
 
                 oled.drawStr(0, 48, value);
 
-                char index[24];
-                snprintf(
-                    index,
-                    sizeof(index),
-                    "%u/%u  B2: next",
-                    (unsigned)(Mode::logIndex() + 1),
-                    (unsigned)Storage::count()
-                );
-
-                oled.drawStr(0, 62, index);
+                if (strcmp(rec.status, "EXPERIMENTAL") == 0) {
+                    oled.drawStr(0, 62, "EXPERIMENTAL ONLY");
+                } else {
+                    char index[24];
+                    snprintf(index, sizeof(index), "%u/%u  B2: next",
+                             (unsigned)(Mode::logIndex() + 1),
+                             (unsigned)Storage::count());
+                    oled.drawStr(0, 62, index);
+                }
             } else {
                 oled.drawStr(0, 42, "No saved readings");
                 oled.drawStr(0, 60, "B1: back");

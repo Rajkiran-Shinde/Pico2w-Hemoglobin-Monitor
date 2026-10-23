@@ -1,59 +1,46 @@
-
 #ifndef HEMOGLOBIN_H
 #define HEMOGLOBIN_H
 
 #include <Arduino.h>
-#include <stdint.h>
 #include "processing.h"
 
-namespace Hemoglobin
-{
-    enum class Status : uint8_t
-    {
-        NOT_READY,
-        SIGNAL_INVALID,
-        CALIBRATION_MISSING,
-        INPUT_OUT_OF_RANGE,
-        ESTIMATE_AVAILABLE
-    };
+namespace Hemoglobin {
 
-    struct Result
-    {
-        Status status = Status::NOT_READY;
-        float valueGdL = 0.0f;
-        float inputRatio = 0.0f;
-        bool available = false;
-    };
+enum class Status : uint8_t {
+    NOT_READY,
+    SIGNAL_INVALID,
+    CALIBRATION_MISSING,
+    INPUT_OUT_OF_RANGE,
+    ESTIMATE_AVAILABLE,
+    EXPERIMENTAL_ESTIMATE
+};
 
-    // Initialize module.
-    void begin();
+struct Result {
+    Status status = Status::NOT_READY;
+    float valueGdL = 0.0f;
+    float inputRatio = 0.0f;
+    bool available = false;
+};
 
-    // Configure a calibrated linear model:
-    // Hb = slope * opticalRatio + intercept
-    bool setCalibration(
-        float slope,
-        float intercept,
-        float ratioMin,
-        float ratioMax,
-        float hbMin,
-        float hbMax
-    );
+void begin();
 
-    void clearCalibration();
+bool setCalibration(
+    float slope,
+    float intercept,
+    float ratioMin,
+    float ratioMax,
+    float hbMin,
+    float hbMax
+);
 
-    // Estimate using configured calibration.
-    Status estimate(
-        const Processing::Features &features,
-        Result &result
-    );
+void clearCalibration();
 
-    // Print an experimental estimate using placeholder coefficients.
-    // This is not a validated hemoglobin measurement.
-    void printExperimentalEstimate(
-        const Processing::Features &features
-    );
+Status estimate(const Processing::Features &features, Result &result);
 
-    const char *statusToString(Status status);
-}
+void printExperimentalEstimate(const Processing::Features &features);
 
-#endif
+const char *statusToString(Status status);
+
+} // namespace Hemoglobin
+
+#endif // HEMOGLOBIN_H
