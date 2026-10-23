@@ -1,174 +1,130 @@
-
 #include <Arduino.h>
-
+#include <Wire.h>
+#include <string.h>
+#include "../include/config.h"
 #include "max30102.h"
 #include "processing.h"
 #include "hemoglobin.h"
 #include "rtc.h"
-#include "../include/config.h"
+#include "buttons.h"
+#include "display.h"
+#include "storage.h"
+#include "mode.h"
 
-// Timing
-static uint32_t lastEstimateMs = 0;
-static uint32_t lastSequence = 0;
-static bool samplingIntegrityValid = true;
 static bool rtcAvailable = false;
+static bool displayAvailable = false;
+static bool storageAvailable = false;
+static uint32_t lastEstimateMs = 0, lastDisplayMs = 0, lastSequence = 0;
+static bool samplingIntegrityValid = true;
+static float latestHb = 0.0f;
+static bool latestHbAvailable = false;
+static char latestStatus[40] = "Waiting for finger";
+static char timestamp[24] = "RTC unavailable";
 
-void setup()
-{
-    Serial.begin(SERIAL_BAUD_RATE);
-    delay(1000);
-
-    Serial.println();
-    Serial.println("================================");
-    Serial.println(" Pico 2W Hemoglobin Monitor");
-    Serial.println("================================");
-
-    // Initialize the processing and Hb modules.
-    Processing::begin();
-    Hemoglobin::begin();
-
-    // Initialize MAX30102 first.
-    // Its driver initializes the shared I2C bus.
-    if (!MAX30102::begin())
-    {
-        Serial.println("ERROR: MAX30102 initialization failed!");
-
-        while (true)
-        {
-            delay(1000);
-        }
-    }
-
-    Serial.println("MAX30102 initialized successfully.");
-
-    // Initialize RTC using the same I2C bus.
-    // RTC::begin() must not reconfigure Wire pins.
-    rtcAvailable = RTC::begin();
-
-    if (rtcAvailable)
-    {
-        Serial.println("RTC initialized successfully.");
-
-        char timestamp[24];
-
-        if (RTC::getTimestamp(timestamp, sizeof(timestamp)))
-        {
-            Serial.print("RTC Date/Time: ");
-            Serial.println(timestamp);
-        }
-    }
-    else
-    {
-        Serial.println("WARNING: RTC not detected.");
-        Serial.println("Check DS3231 wiring and battery.");
-    }
-
-    Serial.println();
-    Serial.println("Waiting for valid readings...");
+static void setStatus(const char *text) {
+  strncpy(latestStatus, text, sizeof(latestStatus) - 1);
+  latestStatus[sizeof(latestStatus) - 1] = '\0';
 }
 
-void loop()
-{
-    // Update MAX30102 acquisition.
+void setup() {
+  Serial.begin(SERIAL_BAUD_RATE);
+  delay(800);
+  Serial.println("\nPico 2W Hemoglobin Monitor - UI integration");
+// Arduino Mbed RP2040 core
+// Default Wire pins: GP4 (SDA), GP5 (SCL)
+Wire.begin();
+Wire.setClock(I2C_CLOCK_HZ);
+  Wire.setClock(I2C_CLOCK_HZ);
+
+  Processing::begin();
+  Hemoglobin::begin(); // Existing Hb API preserved; no calibration coefficients invented.
+  Buttons::begin();
+  Mode::begin();
+
+  if (!MAX30102::begin()) {
+    setStatus("MAX30102 init failed");
+    Mode::setMessage("MAX30102 init failed", 3000);
+    Serial.println("ERROR: MAX30102 initialization failed");
+    // Keep UI alive so the failure is visible; sensor reads are skipped below.
+  } else Serial.println("MAX30102 initialized");
+
+  rtcAvailable = RTC::begin();
+  if (rtcAvailable) Serial.println("RTC initialized");
+  else Serial.println("WARNING: RTC unavailable");
+
+  displayAvailable = Display::begin();
+  if (!displayAvailable) Serial.println("WARNING: OLED initialization failed");
+
+  storageAvailable = Storage::begin();
+  if (storageAvailable) Serial.println("LittleFS log storage initialized");
+  else Serial.println("WARNING: LittleFS unavailable; logs will not persist");
+
+  if (!storageAvailable) Mode::setMessage("Storage unavailable", 3000);
+}
+
+void loop() {
+  Mode::handle(Buttons::poll());
+
+  if (MAX30102::isInitialized()) {
     MAX30102::update();
-
-    // Detect queue overflow.
     static uint32_t lastOverflowCount = 0;
-
-    uint32_t overflowCount =
-        MAX30102::getQueueOverflowCount();
-
-    if (overflowCount != lastOverflowCount)
-    {
-        lastOverflowCount = overflowCount;
-
-        Processing::reset();
-        lastSequence = 0;
-        samplingIntegrityValid = false;
-
-        Serial.println(
-            "WARNING: Sample queue overflow. "
-            "Rebuilding signal window."
-        );
+    uint32_t overflows = MAX30102::getQueueOverflowCount();
+    if (overflows != lastOverflowCount) {
+      lastOverflowCount = overflows;
+      Processing::reset(); lastSequence = 0; samplingIntegrityValid = false;
+      setStatus("Sampling gap - retry");
     }
-
-    // Process all available sensor samples.
     MAX30102::RawSample sample;
-
-    while (MAX30102::readSample(sample))
-    {
-        // Detect missing samples.
-        if (lastSequence != 0 &&
-            sample.sequence != lastSequence + 1)
-        {
-            Processing::reset();
-            samplingIntegrityValid = false;
-
-            Serial.println(
-                "WARNING: Sample sequence gap detected."
-            );
-        }
-
-        lastSequence = sample.sequence;
-
-        Processing::addSample(sample.red, sample.ir);
-
-        if (Processing::getSampleCount() ==
-            Processing::WINDOW_SIZE)
-        {
-            samplingIntegrityValid = true;
-        }
+    while (MAX30102::readSample(sample)) {
+      if (lastSequence != 0 && sample.sequence != lastSequence + 1) {
+        Processing::reset(); samplingIntegrityValid = false;
+        setStatus("Signal gap - retry");
+      }
+      lastSequence = sample.sequence;
+      Processing::addSample(sample.red, sample.ir);
+      if (Processing::getSampleCount() == Processing::WINDOW_SIZE) samplingIntegrityValid = true;
     }
 
-    // Estimate Hb once per second when the signal is valid.
-    if (samplingIntegrityValid &&
-        Processing::isWindowReady() &&
-        millis() - lastEstimateMs >= 1000)
-    {
-        lastEstimateMs = millis();
-
-        Processing::Features features;
-
-        if (Processing::calculateFeatures(features) &&
-            features.signalValid)
-        {
-            Hemoglobin::Result result;
-
-            Hemoglobin::Status status =
-                Hemoglobin::estimate(features, result);
-
-            if (status ==
-                    Hemoglobin::Status::ESTIMATE_AVAILABLE &&
-                result.available)
-            {
-                char timestamp[24];
-
-                Serial.println();
-                Serial.println("========== MEASUREMENT ==========");
-
-                // Print RTC timestamp.
-                if (rtcAvailable &&
-                    RTC::getTimestamp(
-                        timestamp,
-                        sizeof(timestamp)))
-                {
-                    Serial.print("Date & Time : ");
-                    Serial.println(timestamp);
-                }
-                else
-                {
-                    Serial.println(
-                        "Date & Time : RTC unavailable"
-                    );
-                }
-
-                // Print hemoglobin estimate.
-                Serial.print("Hemoglobin  : ");
-                Serial.print(result.valueGdL, 2);
-                Serial.println(" g/dL");
-
-                Serial.println("=================================");
+    if (Mode::measurementActive() && !Mode::singleMeasurementComplete() &&
+        samplingIntegrityValid && Processing::isWindowReady() && millis() - lastEstimateMs >= 1000) {
+      lastEstimateMs = millis();
+      Processing::Features features;
+      if (Processing::calculateFeatures(features)) {
+        if (!features.fingerDetected) {
+          setStatus("Place finger on sensor"); latestHbAvailable = false;
+        } else if (!features.signalValid) {
+          setStatus("Signal invalid - retry"); latestHbAvailable = false;
+        } else {
+          Hemoglobin::Result result;
+          Hemoglobin::Status status = Hemoglobin::estimate(features, result);
+          if (status == Hemoglobin::Status::ESTIMATE_AVAILABLE && result.available) {
+            latestHb = result.valueGdL; latestHbAvailable = true; setStatus("Signal OK");
+            if (rtcAvailable) RTC::getTimestamp(timestamp, sizeof(timestamp));
+            else strncpy(timestamp, "RTC unavailable", sizeof(timestamp));
+            Mode::onMeasurement(latestHb, timestamp, true, "OK");
+            Serial.print("Hb: "); Serial.print(latestHb, 2); Serial.println(" g/dL");
+          } else {
+            latestHbAvailable = false;
+            setStatus(Hemoglobin::statusToString(status));
+            if (status == Hemoglobin::Status::CALIBRATION_MISSING) {
+              // Do not display or save a fabricated Hb value.
+              Mode::setMessage("Calibration required", 2500);
+            } else if (status == Hemoglobin::Status::INPUT_OUT_OF_RANGE) {
+              Mode::onMeasurement(0, timestamp, false, "Signal out of range");
             }
+          }
         }
+      } else { latestHbAvailable = false; setStatus("Signal invalid - retry"); }
     }
+  }
+
+  if (rtcAvailable) RTC::getTimestamp(timestamp, sizeof(timestamp));
+  if (millis() - lastDisplayMs >= DISPLAY_UPDATE_INTERVAL_MS) {
+    lastDisplayMs = millis();
+    uint16_t n = Processing::getSampleCount();
+    uint8_t pct = (uint8_t)((uint32_t)n * 100U / Processing::WINDOW_SIZE);
+    Display::update(Mode::screen(), Mode::measureMode(), Mode::message(), timestamp,
+                    rtcAvailable, latestHb, latestHbAvailable, latestStatus, pct,
+                    Mode::menuSelection(), Mode::settingsMenuSelection());
+  }
 }
