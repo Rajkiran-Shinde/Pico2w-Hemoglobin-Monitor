@@ -82,6 +82,24 @@ void update(
         return;
     }
 
+    static uint32_t lastRenderDebug = 0;
+
+if (millis() - lastRenderDebug >= 1000) {
+    lastRenderDebug = millis();
+
+    Serial.print("[RENDER] Screen=");
+    Serial.print((int)screen);
+
+    Serial.print(" Hb=");
+    Serial.print(hb, 2);
+
+    Serial.print(" Available=");
+    Serial.print(hbAvailable);
+
+    Serial.print(" DisplayReady=");
+    Serial.println(ready);
+}
+
     oled.clearBuffer();
     header(timestamp, rtcAvailable, Mode::soc());
 
@@ -119,42 +137,51 @@ void update(
         // -------------------------------------------------
         // MEASUREMENT SCREEN
         // -------------------------------------------------
-        case Mode::Screen::MEASURE: {
-            oled.drawStr(
+        case Mode::Screen::MEASURE:{
+        oled.drawStr(
                 0, 23,
                 mode == Mode::MeasureMode::SINGLE
                     ? "SINGLE MEASUREMENT"
                     : "CONTINUOUS MODE"
             );
 
-            if (hbAvailable) {
-                oled.setFont(u8g2_font_7x14B_tf);
+            
+if (hbAvailable) {
+    oled.setFont(u8g2_font_7x14B_tf);
 
-                char value[24];
-                snprintf(
-                    value,
-                    sizeof(value),
-                    "Hb: %.2f g/dL",
-                    hb
-                );
+    char value[24];
 
-                oled.drawStr(0, 40, value);
-                oled.setFont(u8g2_font_5x7_tf);
-                oled.drawStr(0, 51, "Experimental - NOT calibrated");
+    // Convert Hb to an integer representing hundredths.
+    // Example: 12.74 g/dL becomes 1274.
+    int hbCenti = (int)(hb * 100.0f + 0.5f);
 
-            } else {
-                oled.drawStr(0, 35, "Keep finger still");
+    snprintf(
+        value,
+        sizeof(value),
+        "Hb: %d.%02d g/dL",
+        hbCenti / 100,
+        hbCenti % 100
+    );
 
-                char progress[24];
-                snprintf(
-                    progress,
-                    sizeof(progress),
-                    "Signal window: %u%%",
-                    samplesPercent
-                );
+    oled.drawStr(0, 40, value);
 
-                oled.drawStr(0, 48, progress);
-            }
+    oled.setFont(u8g2_font_5x7_tf);
+    oled.drawStr(0, 51, "Experimental - NOT calibrated");
+
+} else {
+    oled.drawStr(0, 35, "Keep finger still");
+
+    char progress[24];
+    snprintf(
+        progress,
+        sizeof(progress),
+        "Signal window: %u%%",
+        samplesPercent
+    );
+
+    oled.drawStr(0, 48, progress);
+}
+
 
             oled.setFont(u8g2_font_5x7_tf);
 

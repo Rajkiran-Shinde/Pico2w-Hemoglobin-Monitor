@@ -134,5 +134,7 @@ void loop() {
     Display::update(Mode::screen(), Mode::measureMode(), Mode::message(), timestamp,
                     rtcAvailable, latestHb, latestHbAvailable, latestStatus, pct,
                     Mode::menuSelection(), Mode::settingsMenuSelection());
+
+
   }
 }
