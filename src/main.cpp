@@ -10,6 +10,8 @@
 #include "display.h"
 #include "storage.h"
 #include "mode.h"
+#include "led.h"
+#include "buzz.h"
 
 static bool rtcAvailable = false;
 static bool displayAvailable = false;
@@ -36,6 +38,10 @@ Wire.begin();
 Wire.setClock(I2C_CLOCK_HZ);
   Wire.setClock(I2C_CLOCK_HZ);
 
+  Led::begin();
+    Led::setState(Led::State::NORMAL);
+    Led::update();
+  Buzz::begin();
   Processing::begin();
   Hemoglobin::begin(); // Existing Hb API preserved; no calibration coefficients invented.
   Buttons::begin();
@@ -60,10 +66,18 @@ Wire.setClock(I2C_CLOCK_HZ);
   else Serial.println("WARNING: LittleFS unavailable; logs will not persist");
 
   if (!storageAvailable) Mode::setMessage("Storage unavailable", 3000);
+
+  // Non-blocking startup melody; Buzz::update() advances it from loop().
+  Buzz::playStartupTune();
 }
 
 void loop() {
-  Mode::handle(Buttons::poll());
+  const Buttons::Event buttonEvent = Buttons::poll();
+  if (buttonEvent != Buttons::Event::NONE) Buzz::playButtonBeep();
+  Mode::handle(buttonEvent);
+
+  Buzz::update();
+  Led::update();
 
   if (MAX30102::isInitialized()) {
     MAX30102::update();
@@ -134,7 +148,26 @@ void loop() {
     Display::update(Mode::screen(), Mode::measureMode(), Mode::message(), timestamp,
                     rtcAvailable, latestHb, latestHbAvailable, latestStatus, pct,
                     Mode::menuSelection(), Mode::settingsMenuSelection());
+  }
 
+  // Indicator priority: sensor initialization failure > recoverable fault >
+  // measurement/result activity > normal ready state.
+  if (!MAX30102::isInitialized()) {
+    Led::setState(Led::State::CRITICAL);
+  } else {
+    const bool signalFault =
+        (strstr(latestStatus, "invalid") != nullptr) ||
+        (strstr(latestStatus, "gap") != nullptr) ||
+        (strstr(latestStatus, "retry") != nullptr) ||
+        (strstr(latestStatus, "failed") != nullptr);
+    const bool peripheralWarning = !rtcAvailable || !storageAvailable;
 
+    if (signalFault || peripheralWarning) {
+      Led::setState(Led::State::WARNING);
+    } else if (Mode::measurementActive() || latestHbAvailable) {
+      Led::setState(Led::State::ACTIVITY);
+    } else {
+      Led::setState(Led::State::NORMAL);
+    }
   }
 }
