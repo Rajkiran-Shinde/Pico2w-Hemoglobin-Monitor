@@ -36,7 +36,6 @@ void setup() {
 // Default Wire pins: GP4 (SDA), GP5 (SCL)
 Wire.begin();
 Wire.setClock(I2C_CLOCK_HZ);
-  Wire.setClock(I2C_CLOCK_HZ);
 
   Led::begin();
     Led::setState(Led::State::NORMAL);
@@ -55,8 +54,9 @@ Wire.setClock(I2C_CLOCK_HZ);
   } else Serial.println("MAX30102 initialized");
 
   rtcAvailable = RTC::begin();
-  if (rtcAvailable) Serial.println("RTC initialized");
-  else Serial.println("WARNING: RTC unavailable");
+  //if (rtcAvailable) Serial.println("RTC initialized");
+  //else Serial.println("WARNING: RTC unavailable");
+
 
   displayAvailable = Display::begin();
   if (!displayAvailable) Serial.println("WARNING: OLED initialization failed");
@@ -75,6 +75,19 @@ void loop() {
   const Buttons::Event buttonEvent = Buttons::poll();
   if (buttonEvent != Buttons::Event::NONE) Buzz::playButtonBeep();
   Mode::handle(buttonEvent);
+
+  // A fresh measurement starts only after B1 is pressed on the HB prompt.
+  // Reset the signal window so old samples cannot contaminate a new reading.
+  if (Mode::measurementRequested()) {
+    Mode::clearMeasurementRequest();
+    Processing::reset();
+    lastSequence = 0;
+    samplingIntegrityValid = true;
+    latestHbAvailable = false;
+    latestHb = 0.0f;
+    setStatus("Place finger on sensor");
+    lastEstimateMs = millis();
+  }
 
   Buzz::update();
   Led::update();
@@ -147,7 +160,7 @@ void loop() {
     uint8_t pct = (uint8_t)((uint32_t)n * 100U / Processing::WINDOW_SIZE);
     Display::update(Mode::screen(), Mode::measureMode(), Mode::message(), timestamp,
                     rtcAvailable, latestHb, latestHbAvailable, latestStatus, pct,
-                    Mode::menuSelection(), Mode::settingsMenuSelection());
+                    Mode::menuSelection());
   }
 
   // Indicator priority: sensor initialization failure > recoverable fault >
