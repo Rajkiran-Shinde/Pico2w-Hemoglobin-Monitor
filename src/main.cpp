@@ -164,7 +164,11 @@ void loop() {
   }
 
   // Indicator priority: sensor initialization failure > recoverable fault >
-  // measurement/result activity > normal ready state.
+  // active acquisition > normal ready state.
+  // Do not use latestHbAvailable here: it remains true after a successful
+  // result is produced, which would keep the blue LED blinking indefinitely.
+  // singleMeasurementComplete() prevents activity indication after the result
+  // has been accepted, even if the UI remains on the MEASURE screen.
   if (!MAX30102::isInitialized()) {
     Led::setState(Led::State::CRITICAL);
   } else {
@@ -177,7 +181,7 @@ void loop() {
 
     if (signalFault || peripheralWarning) {
       Led::setState(Led::State::WARNING);
-    } else if (Mode::measurementActive() || latestHbAvailable) {
+    } else if (Mode::measurementActive() && !Mode::singleMeasurementComplete()) {
       Led::setState(Led::State::ACTIVITY);
     } else {
       Led::setState(Led::State::NORMAL);

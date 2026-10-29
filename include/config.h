@@ -109,8 +109,8 @@ constexpr uint8_t PIN_BUZZER = 12; // GP12, physical pin 16
 // 6. LED CONFIGURATION
 // ============================================================
 
-constexpr uint8_t PIN_LED_RED    = 14; // GP14, 
-constexpr uint8_t PIN_LED_GREEN  = 13; // GP13, 
+constexpr uint8_t PIN_LED_RED    = 13; // GP13, 
+constexpr uint8_t PIN_LED_GREEN  = 14; // GP14, 
 constexpr uint8_t PIN_LED_BLUE   = 16; // GP16, 
 constexpr uint8_t PIN_LED_YELLOW = 15; // GP15, 
 
